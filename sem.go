@@ -4,49 +4,28 @@ import (
 	"flag"
 	"log"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
 /*
 #include <sys/sem.h>
 typedef struct sembuf sembuf;
-typedef struct _semun {
-        int val;
-} semun;;
+typedef union semun semun;
 
 */
 import "C"
 
 func semget(key int) int {
-	r1, _, _ := syscall.Syscall(syscall.SYS_SEMGET, uintptr(key),
+	r1, r2, err := syscall.Syscall(syscall.SYS_SEMGET, uintptr(key),
 		uintptr(1), uintptr(00666))
 	if int(r1) < 0 {
-		semid, r2, err := syscall.Syscall(syscall.SYS_SEMGET, uintptr(key),
+		r1, r2, err = syscall.Syscall(syscall.SYS_SEMGET, uintptr(key),
 			uintptr(1), uintptr(C.IPC_CREAT|C.IPC_EXCL|00666))
-		if int(semid) < 0 {
+		if int(r1) < 0 {
 			log.Printf("error:semget error is %v\n", err)
 		}
-		var newInit int
-		newInit = 1
-
-		r1, r2, err := syscall.Syscall6(syscall.SYS_SEMCTL,
-			uintptr(semid),
-			uintptr(0),
-			uintptr(C.SETVAL),
-			uintptr(newInit),
-			uintptr(0), uintptr(0))
-		if int(r1) < 0 {
-			log.Fatal("error:SYS_SEMCTL:", r1, r2, err)
-		}
-		return int(semid)
-
 	} else {
-
-		semid := r1
-
-		return int(semid)
-
+		log.Printf("success :semget is %v,%v,%v\n", r1, r2, err)
 	}
 	return int(r1)
 }
@@ -65,14 +44,15 @@ func semLock(semid int) int {
 	}
 	return int(r1)
 }
+
 func semShow(semid int) int {
 
 	r1, r2, err := syscall.Syscall(syscall.SYS_SEMCTL,
 		uintptr(semid),
-		uintptr(0),
+		0,
 		uintptr(C.GETVAL))
 	if int(r1) < 0 {
-		log.Printf("error:semShow error is %v,%v,%v\n", r1, r2, err)
+		log.Printf("error:semShow error is %v,%v,%v on id %d\n", r1, r2, err, semid)
 	}
 	return int(r1)
 }
@@ -89,22 +69,22 @@ func main() {
 		flag.Usage()
 		log.Fatal("Must have a key")
 	}
-	sem := semget(*key)
-	if sem < 0 {
-		log.Printf("Open Sem Failed with %d!\n", sem)
+
+	semid := semget(*key)
+	if semid < 0 {
+		log.Printf("Open Sem Failed with key %d!\n", *key)
 		return
 	}
-
 	if *view == true {
-		log.Printf("sem show result is %d\n", semShow(sem))
-	} else {
+		ret := semShow(semid)
+		log.Printf("show sem return %d!\n", ret)
 
-		ret := semLock(sem)
+	} else {
+		ret := semLock(semid)
 		if ret != 0 {
 			log.Fatal("Wait Sem Failed!\n")
 		}
-		log.Printf("Wait for Sem %d success and go on!\n", *key)
-		time.Sleep(time.Duration(10) * time.Second)
+		log.Printf("Wait for Semid %d success and go on!\n", semid)
 	}
 
 }
